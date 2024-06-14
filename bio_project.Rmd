@@ -1,0 +1,581 @@
+---
+title: "bio project"
+author: "Sama Zayed"
+date: "2024-06-12"
+output: word_document
+---
+
+| NAME                   | ID       |
+|------------------------|----------|
+| Mariam Gerges Zaki Gad | 20011880 |
+| Sama Tarek Anwar Zayed | 20010698 |
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r}
+#BiocManager::install("SNPRelate")
+#BiocManager::install("GENESIS")
+#BiocManager::install("GeneNet")
+#install.packages("fastmap")
+#install.packages("qqman")
+#install.packages("data.table")
+#install.packages("dplyr")
+```
+
+```{r}
+library(tidyverse)
+library(SNPRelate)
+library(GENESIS)
+library(GWASTools)
+library(qqman)
+library(GeneNet)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(data.table)
+library(readr)
+library(readxl)
+```
+
+# task 1
+
+```{r}
+
+# File paths
+ped_file <- "C:/Users/dell/Downloads/mmc2/Qatari156_filtered_pruned_out.ped"
+map_file <- "C:/Users/dell/Downloads/mmc2/Qatari156_filtered_pruned_out.map"
+gds_file <- "C:/Users/dell/Downloads/mmc2/qatari_dataset.gds"
+
+
+# Convert PLINK files to GDS format
+snpgdsPED2GDS(ped.fn = ped_file, map.fn = map_file, out.gdsfn = gds_file)
+
+```
+
+```{r}
+# Open the GDS file
+genofile <- snpgdsOpen(gds_file)
+# Compute kinship using Maximum Likelihood Estimation (MLE) method
+#kinship <- snpgdsIBDMLE(genofile, kinship = TRUE, num.thread = 7)
+file_path <- "C:/Users/dell/Downloads/aho/matrix_output.txt"
+kinship_matrix <- as.matrix(read.table(file = file_path, header = FALSE, sep = "\t"))
+snpgdsClose(genofile)
+# Extract the kinship matrix
+#kinship_matrix <- as.data.frame(kinship$kinship)
+
+```
+
+```{r}
+#print(kinship_matrix)
+metabolites <- read.csv("C:/Users/dell/Downloads/Qattari_Metabolites - Dataset.csv")
+first_column <- metabolites[, 1]
+colnames(first_column) <- NULL
+related_pairs <- list()
+# Loop through upper triangle of kinship matrix
+for (i in 1:(nrow(kinship_matrix) - 1)) {
+  for (j in (i + 1):ncol(kinship_matrix)) {
+    if (kinship_matrix[i, j] > 0.1) {
+      related_pair <- c(first_column[i], first_column[j])
+      related_pairs  <- c(related_pairs , list(related_pair))
+    }
+  }
+}
+related_pairs
+
+```
+
+# task 2
+
+```{r}
+#C:/Users/dell/Downloads/mmc2/Qatari156_filtered_pruned_pca.eigenvec
+#C:/Users/dell/Downloads/Qattari_Metabolites - Dataset.csv'
+
+
+pca_eigenvec <- read.table("C:/Users/dell/Downloads/mmc2/Qatari156_filtered_pruned_pca.eigenvec", header = FALSE)
+colnames(pca_eigenvec) <- c("FID", "IID", paste0("PC", 1:(ncol(pca_eigenvec) - 2)))
+metabolites_data <- read.csv("C:/Users/dell/Downloads/Qattari_Metabolites - Dataset.csv")
+
+colnames(metabolites_data)[colnames(metabolites_data) == "Sample"] <- "IID"
+merged_data <- merge(pca_eigenvec, metabolites_data, by = "IID", sort = FALSE)
+rownames(kinship_matrix) <- merged_data$IID
+colnames(kinship_matrix) <- merged_data$IID
+rownames(merged_data) <- merged_data$IID
+
+# Scatter plot of PC1 vs PC2
+plot1 <- ggplot(pca_eigenvec, aes(x = PC1, y = PC2)) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "PCA Plot: PC1 vs PC2", x = "Principal Component 1", y = "Principal Component 2")
+
+# Scatter plot of PC2 vs PC3
+plot2 <- ggplot(pca_eigenvec, aes(x = PC2, y = PC3)) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "PCA Plot: PC2 vs PC3", x = "Principal Component 2", y = "Principal Component 3")
+
+# Scatter plot of PC1 vs PC3
+plot3 <- ggplot(pca_eigenvec, aes(x = PC1, y = PC3)) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "PCA Plot: PC1 vs PC3", x = "Principal Component 1", y = "Principal Component 3")
+
+# Arrange the plots on a grid
+grid.arrange(plot1, plot2, plot3, ncol = 3)
+```
+
+```{r}
+kinship_matrix_2<-0
+```
+
+```{r}
+file_path <- "C:\Users\dell\Downloads\aho\matrix_output.txt"
+kinship_matrix <- as.matrix(read.table(file = file_path, header = FALSE, sep = "\t"))
+#print(kinship_matrix)
+print(class(kinship_matrix))
+```
+
+```{r}
+
+
+
+pca_result <- read.table("C:/Users/dell/Downloads/mmc2/Qatari156_filtered_pruned_pca.eigenvec", header = FALSE)
+metabolites <- read.csv("C:/Users/dell/Downloads/Qattari_Metabolites - Dataset.csv")
+
+colnames_to_iterate=colnames(pca_result)[-(1:2)]
+colnames(pca_result) <- c("FID", "IID", paste0("PC", 1:(ncol(pca_result) - 2)))
+metabolites=rename(metabolites, IID = Sample)
+
+merged_data <- merge(pca_result, metabolites, by = "IID", sort = FALSE)
+
+rownames(merged_data) <- merged_data$IID
+rownames(kinship_matrix) <- merged_data$IID
+colnames(kinship_matrix) <- merged_data$IID
+
+ 
+# Define covariates
+covars <- c("PC1", "PC2", "PC3")
+family <- "gaussian"
+
+# Placeholder for corrected metabolites results
+corrected_metabolites <- list()
+
+# Correct each metabolite for PC1, PC2, PC3, and kinship matrix
+for (metabolite in colnames(metabolites)[-1]) {  # Exclude the 'IID' column
+  # Create ScanAnnotationDataFrame
+  scanAnnot <- ScanAnnotationDataFrame(data.frame(
+    scanID = merged_data$IID,
+    PC1 = merged_data$PC1,
+    PC2 = merged_data$PC2,
+    PC3 = merged_data$PC3,
+    pheno = merged_data[[metabolite]]
+  ))
+  
+  # Fit the null model using GENESIS
+  null_model <- fitNullModel(
+    x = scanAnnot,
+    outcome = "pheno",
+    covars = covars,
+    cov.mat = kinship_matrix,
+    family = family
+  )
+  
+  # Extract residuals as corrected metabolite levels
+  corrected_metabolites[[metabolite]] <- null_model
+  #$fit$fitted.values
+#summary(null_model)
+}
+
+```
+
+```{r}
+#close(HapMap_genoData)
+gds.fn<-"C:/Users/dell/Downloads/mmc2/qatari_dataset.gds"
+HapMap_geno <- GdsGenotypeReader(gds.fn)
+HapMap_genoData <- GenotypeData(HapMap_geno, scanAnnot = scanAnnot)
+genoIterator <- GenotypeBlockIterator(HapMap_genoData)
+print(genoIterator)
+association_results <- list()
+heritability_results <- list()
+for (metabolite in names(corrected_metabolites)) {
+  genoIterator <- GenotypeBlockIterator(HapMap_genoData, snpBlock=5000)
+  assoc <- assocTestSingle(genoIterator, null.model = corrected_metabolites[[metabolite]],
+                         BPPARAM = BiocParallel::SerialParam())
+  association_results[[metabolite]] <- assoc
+  h_values<- varCompCI(corrected_metabolites[[metabolite]])
+  heritability_results[[metabolite]] <- list(
+    metabolite=metabolite,
+    Heritability=h_values["V_A", "Proportion"]
+  )
+  print(heritability_results)
+}
+close(HapMap_genoData)
+#head(association_results)
+
+```
+
+```{r}
+library(openxlsx)
+
+
+#head(heritability_results)
+heritability_df <- as.data.frame(do.call(rbind, heritability_results))
+write.xlsx(heritability_df, file = "C:/Users/dell/Downloads/aho/heritability_results.xlsx", row.names = FALSE)
+
+```
+
+```{r}
+
+
+# Initialize a new workbook
+workbook <- createWorkbook()
+
+# Function to filter significant associations and add them to the workbook
+add_significant_results <- function(metabolite, results, workbook) {
+  # Extract all results for the metabolite
+  complete_results <- results[[metabolite]]
+  
+  # Identify significant results with p-value < 0.01
+  significant_results <- complete_results[complete_results$Score.pval < 0.01, ]
+  
+  if (nrow(significant_results) > 0) {  # Ensure there are significant results
+    # Add a new sheet for the metabolite
+    addWorksheet(workbook, metabolite)
+    
+    # Define the columns to be written to the sheet
+    columns_to_write <- c("variant.id", "chr", "pos", "n.obs", "freq", "MAC", 
+                          "Score", "Score.SE", "Score.Stat", "Score.pval",
+                          "Est", "Est.SE", "PVE")
+    
+    # Write the significant results to the sheet
+    writeData(workbook, sheet = metabolite, significant_results[, columns_to_write])
+  }
+}
+
+# Iterate over each metabolite and process results
+for (metabolite in names(association_results)) {
+  add_significant_results(metabolite, association_results, workbook)
+}
+
+
+saveWorkbook(workbook, "C:/Users/dell/Downloads/aho/significant_associations.xlsx", overwrite = TRUE)
+
+
+```
+
+```{r}
+
+# Path to your Excel file
+excel_file <- "C:/Users/dell/Downloads/aho/significant_associations.xlsx"
+
+# Get all sheet names
+sheet_names <- excel_sheets(excel_file)
+
+# Read all sheets into a list of data frames with SheetName column
+all_data <- lapply(sheet_names, function(sheet) {
+  df <- read_excel(excel_file, sheet = sheet)
+  df$metabolite <- sheet
+  return(df)
+})
+# Combine all data frames into one
+merged_data <- bind_rows(all_data)
+# Print merged_data or write it to a new Excel file
+head(merged_data)  # Print the first few rows
+write.xlsx(merged_data, "C:/Users/dell/Downloads/aho/significant_associations2.xlsx")  # Uncomment to write to Excel
+
+```
+
+# Task 3: Inflation factor calculation (10 points): (Reference slide given)
+
+```{r}
+calculate_lambda <- function(pvals) {
+  chi_squared <- qchisq(1 - pvals, df = 1)
+  lambda <- median(chi_squared) / 0.456
+  return(lambda)
+}
+
+lambda_values <- numeric(length(association_results))
+
+for (i in seq_along(association_results)) {
+  pvals <- association_results[[i]]$Score.pval
+  lambda_values[i] <- calculate_lambda(pvals)
+}
+
+average_lambda <- mean(lambda_values)
+
+cat("Lambda values for each metabolite:\n", lambda_values, "\n")
+cat("Average inflation factor (lambda):\n", average_lambda, "\n")
+
+```
+
+# Task 4: Manhattan Plot
+
+```{r}
+# Load the GDS file
+#snpgdsClose(genofile)
+genofile <- snpgdsOpen(gds_file)
+
+# Extract SNP information
+snp_info <- snpgdsSNPList(genofile)
+snpgdsClose(genofile)
+
+head(snp_info)
+
+#for (metabolite in names(corrected_metabolites)) {
+  xx<-association_results[[metabolite]]
+#}
+```
+
+```{r}
+
+library(dplyr)  
+
+# Loop through each metabolite and create Manhattan plots
+for (metabolite in names(corrected_metabolites)) {
+  metabolite_data <- association_results[[metabolite]]
+  
+  # Convert chr column to numeric
+  metabolite_data$chr <- gsub('X', '23', metabolite_data$chr)
+  metabolite_data$chr <- gsub('Y', '24', metabolite_data$chr)
+  metabolite_data$chr <- as.numeric(metabolite_data$chr)
+  
+  # Check for missing values and remove them
+  metabolite_data <- metabolite_data %>%
+    filter(!is.na(chr) & !is.na(pos) & !is.na(Score.pval) & !is.na(variant.id))
+  
+  # Prepare data for Manhattan plot
+  manhattan_data <- metabolite_data %>%
+    dplyr::select(variant.id, chr, pos, Score.pval) %>%
+    dplyr::rename(SNP = variant.id, CHR = chr, BP = pos, P = Score.pval)
+  
+  # Define Bonferroni threshold
+  bonferroni_threshold <- 0.05 / nrow(manhattan_data)
+  
+  # Create Manhattan plot
+  manhattan(manhattan_data, 
+            chr = "CHR", 
+            bp = "BP", 
+            p = "P", 
+            snp = "SNP", 
+            genomewideline = -log10(bonferroni_threshold),
+            suggestiveline = -log10(1e-5),
+            main = paste("Manhattan Plot of", metabolite, "Metabolite-SNP Associations"),
+            col = c("blue4", "orange3"),
+            ylim = c(0, 10))
+}
+
+
+```
+
+```{r}
+print(class(corrected_metabolites$Metabolite1))
+```
+
+# task5
+
+```{r}
+
+
+# Step 1: Extract the fitted.values from the corrected metabolites
+fitted_values_list <- sapply(corrected_metabolites, function(x) x$fit$fitted.values)
+
+# Step 2: Adjust the column names
+fitted_values_df <- data.frame(fitted_values_list)
+colnames(fitted_values_df) <- paste0("Metabolite", 1:20)
+
+# Step 3: Calculate partial correlations using ggm.estimate.pcor
+pcor_matrix <- ggm.estimate.pcor(fitted_values_df)
+#print(pcor_matrix)
+
+# Step 4: Identify significant edges using network.test.edges
+edges <- network.test.edges(pcor_matrix, direct = TRUE)
+
+# Step 5: Create the network using extract.network
+network <- extract.network(edges, method.ggm = 'number', cutoff.ggm = 100)
+network$node1 <- paste0("Metabolite", network$node1)
+network$node2 <- paste0("Metabolite", network$node2)
+
+# Step 6: Export the pairs to a CSV file for Cytoscape
+write.csv(network, file = "significant_edges.csv", row.names = FALSE)
+
+# Print a message indicating completion
+cat("The significant edges have been exported to 'significant_edges.csv'")
+
+```
+
+![](C:/Users/dell/Downloads/aho/photo_2024-06-14_00-58-17.jpg)
+
+# Task 6: Annotate Significant SNPs
+
+```{r}
+
+get_top_snps <- function(df) {
+  df %>%
+    arrange(Score.pval) %>%
+    slice(1:10)
+}
+# Process each dataframe to get top 10 SNPs
+top_snps_list <- lapply(association_results, get_top_snps)
+print(top_snps_list$Metabolite1)
+
+
+```
+
+```{r}
+
+# Initialize an empty dataframe to collect all merged dataframes
+all_metabolites_top_10 <- data.frame()
+
+# Loop through dataframes and their corresponding names
+for (metabolite in names(association_results)) {
+  # Add a new column 'INFO' with the name of the dataframe
+  top_snps_list[[metabolite]]$INFO <- metabolite
+  
+  # Bind rows to the merged dataframe
+  all_metabolites_top_10 <- bind_rows(all_metabolites_top_10, top_snps_list[[metabolite]])
+}
+
+# Print the merged dataframe
+print(all_metabolites_top_10)
+
+```
+
+```{r}
+
+BiocManager::install("VariantAnnotation")
+
+library(VariantAnnotation)
+
+```
+
+```{r}
+
+bim_file<- read.table("C:/Users/dell/Downloads/mmc2/Qatari156_filtered_pruned.bim",header=FALSE,stringsAsFactors = FALSE)
+colnames(bim_file) <- c("CHR", "Var_NAME", "Genetic_Distance", "POS", "REF", "ALT")
+
+bim_file$variant_ID <- rownames(bim_file)
+all_metabolites_top_10$chr <-gsub('X', '23', all_metabolites_top_10$chr)
+
+# Merge df based on 'rownames' from bim_file and 'variant.id' from all_metabolites_top_10
+merged_top_200_snp <- merge( all_metabolites_top_10,bim_file, by.x = c("variant.id","chr","pos"), by.y = c("variant_ID","CHR","POS"))
+
+
+# Display the merged df
+print(merged_top_200_snp)
+
+```
+
+```{r}
+
+
+# Define the VCF header
+vcf_header <- c(
+  "##fileformat=VCFv4.2",
+  "##source=wANNOVAR",
+  "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
+)
+
+# Assuming 'merged_top_200_snp' is your data frame
+snps <- as_tibble(merged_top_200_snp)
+
+# Prepare the data frame for VCF
+vcf_data <- snps %>%
+  mutate(
+    CHROM = chr,
+    POS = pos,
+    ID = Var_NAME,
+    REF = REF,  # Make sure these columns exist in your data
+    ALT = ALT,  # Make sure these columns exist in your data
+    QUAL = ".",  # Quality score
+    FILTER = ".",  # Filter status
+    INFO = INFO  # Make sure this column exists in your data
+  ) %>%
+  dplyr::select(CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO)  # Explicitly specify dplyr::select
+
+print(vcf_data)  # Display the first 20 line
+# Write the VCF file
+writeLines(vcf_header, "C:/Users/dell/Downloads/aho/merged_top_200_snp.vcf")
+write.table(vcf_data, "C:/Users/dell/Downloads/aho/merged_top_200_snp.vcf", sep="\t", row.names = FALSE, col.names = FALSE, quote = FALSE, append = TRUE)
+
+```
+
+```{r}
+{df_2d <- read_excel("C:/Users/dell/Downloads/aho/significant_associations2.xlsx")}
+```
+
+```{r}
+
+
+id_name_snp <- bim_file[, c("Var_NAME", "variant_ID")]
+
+
+
+
+```
+
+```{r}
+
+
+
+# Read CSV file
+annotation_df <- read_csv("C:/Users/dell/Downloads/aho/query.output.genome_summary.csv")
+df_2d <- read_excel("C:/Users/dell/Downloads/aho/significant_associations2.xlsx")
+
+
+
+# Filter columns with non-empty values (excluding "." and NA)
+non_empty_columns <- colSums(!is.na(annotation_df) & annotation_df != "." & annotation_df!="") > 0
+
+# Create filtered data frame
+annotation_df <- annotation_df[, non_empty_columns]
+
+
+
+
+annotation_df <- merge( annotation_df,id_name_snp, by.x = "Otherinfo...132", by.y = "Var_NAME")
+
+
+merged_annotation <- merge( df_2d,annotation_df, by.x = c("variant.id","metabolite"),by.y = c("variant_ID","Otherinfo...137"))
+print(merged_annotation)
+
+
+
+
+```
+
+```{r}
+
+
+
+write_csv(merged_annotation, "C:/Users/dell/Downloads/aho/annotation_with_top_200_significant.csv")
+
+
+
+```
+
+# Task 7: Regional plots using SNIPA
+
+```{r}
+
+
+# Sort by Score.pval in ascending order
+sorted_data <- merged_data %>% 
+  arrange(Score.pval)
+
+# Get the top 5 significant SNPs with unique variant_if
+top_5_unique_snps <- sorted_data %>% 
+  distinct(variant.id, .keep_all = TRUE) %>%  # Keep all columns while ensuring unique variant_if
+  slice_head(n = 5)
+
+top_5_unique_snps <- merge( top_5_unique_snps,id_name_snp, by.x = "variant.id", by.y = "variant_ID") 
+top_5_unique_snps<- top_5_unique_snps[,c("Var_NAME","Score.pval")]
+print(top_5_unique_snps)
+
+
+
+
+```
+
+![image 1](C:/Users/dell/Downloads/aho/snipa.jpg) ![image 2](C:/Users/dell/Downloads/aho/photo_2024-06-14_19-16-58.jpg)
