@@ -5,11 +5,6 @@ date: "2024-06-12"
 output: word_document
 ---
 
-| NAME                   | ID       |
-|------------------------|----------|
-| Mariam Gerges Zaki Gad | 20011880 |
-| Sama Tarek Anwar Zayed | 20010698 |
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
